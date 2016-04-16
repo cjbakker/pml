@@ -1,0 +1,83 @@
+---
+title: "Prediction Assignment Write-Up"
+output: html_document
+---
+
+##Background (from assignment)
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+##Preparing the Data
+
+Begin by downloading the two data sets.
+
+```{r}
+library(caret)
+library(randomForest)
+trainURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(trainURL, dest="training.csv")
+download.file(testURL, dest="testing.csv") 
+training <- read.csv("training.csv", na.strings = c("", "NA", "#DIV/0!"))
+testing <- read.csv("testing.csv", na.strings = c("", "NA", "#DIV/0!"))
+```
+
+A quick look at the dimensions confirms that the training set is quite large, and looking at head(training) reveals that some of the data may be incomplete or may not be necessary for our purposes. We will start by removing these. 
+
+```{r}
+training <- training[,-c(1:7)]
+testing <- testing[,-c(1:7)]
+bad <- nearZeroVar(training)
+training <- training[, -bad]
+good <- !apply(training, 2, function(x) sum(is.na(x)) || sum(x==""))
+training <- training[, good] 
+```
+
+We're interested in how people do the exercise, housed in the "classe" variable. There are five levels: A ("exactly according to the specification"), B ("throwing the eblows to the front"), C ("lifting the dumbbell only halfway"), D ("lowering the dumbbell only halfway"), and E ("throwing the hips to the front"). We can visualize the frequency of each "classe" in the below plot. 
+
+```{r, echo=FALSE}
+plot(training$classe, main="Distribution of Classe in the Training Set", xlab="Classe", ylab="Frequency")
+```
+
+Because we have such a large number, we can create subsets within the training set to allow us to validate. 25% of the training data set will be set aside for this purpose. 
+
+```{r}
+set.seed(12345)
+training_set <- createDataPartition(training$classe, p = 0.75, list=FALSE)
+training <- training[training_set,]
+validation <- training[-training_set,]
+```
+
+##Prediction Models
+
+```{r}
+model <- randomForest(classe ~ ., data=training, method="class")
+pred1 <- predict(model, training)
+confusionMatrix(pred1, training$classe)
+```
+
+Based on our training data, this model appears to be quite accurate. We will test on the validation set to confirm this. 
+
+```{r}
+pred2 <- predict(model, validation)
+confusionMatrix(pred2, validation$classe)
+```
+
+Considering both the training and validation subsets, we can confirm that the accuracy of the model is very high. The accuracy of the model in both the training and validation sets was 100%. 
+
+```{r}
+print(model, digits=3)
+```
+
+Basing estimated out of sample error rate on the confusionMatrix alone would indicate that it is 0%. However, the OOB (out-of-bag) of error rate is 0.46%. Although not 0%, this nonetheless is a very reasonable error rate and so this model will be selected. 
+
+##Quiz
+
+```{r}
+answers <- predict(model, testing)
+answers
+```
+
+##References
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013. Available at: http://groupware.les.inf.puc-rio.br/har
